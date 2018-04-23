@@ -1,0 +1,92 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Jun 25 06:36:05 2017
+
+@author: Orlando
+"""
+
+#forecasting
+#Regression: the output variable takes continuous values.
+
+#Classification: the output variable takes class labels.
+    
+import pandas as pd
+import quandl
+import math, datetime
+import numpy as np
+from sklearn import preprocessing, cross_validation,svm
+from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
+from matplotlib import style
+
+style.use('ggplot')
+
+#google stock in Quandl
+df = quandl.get('WIKI/GOOGL')
+
+df = df[['Adj. Open','Adj. High','Adj. Low','Adj. Close','Adj. Volume',]]
+#HL Percent
+df['HL_PCT']= (df['Adj. Open'] - df['Adj. Close']) / df['Adj. Close'] * 100.0
+#Percent change
+df['PCT_change']= (df['Adj. Close'] - df['Adj. Open']) / df['Adj. Open'] * 100.0
+
+df = df[['Adj. Close','HL_PCT','PCT_change','Adj. Volume']]
+
+#trabajando con el agoritmo de regresion
+forecast_col = 'Adj. Close'
+df.fillna(value=-99999,inplace=True)  #just in case lose data  o un valor NaN
+
+forecast_out = int(math.ceil(0.01*len(df))) #lo que equivale a 1% del total de dias 
+#de la estancia de este stock por tanto nuestros datos son 100 y nuestro 1% es 0.001
+#en este caso el 1% son 33 dias por el stock
+#print("forecast out:",forecast_out)
+
+#x es el feature
+df['label']= df[forecast_col].shift(-forecast_out)
+X = np.array(df.drop(['label'],1))
+#esto es hacer pronosticado del 1% de los datos
+X = preprocessing.scale(X)                  #ojo: Aqui cambiamos el orden
+X_lately = X[-forecast_out:]
+X= X[:-forecast_out:]
+
+df.dropna(inplace=True)
+#y es los labels
+y = np.array(df['label'])
+
+
+#training and testings
+#Shuffle them, keeping x, y conected, it shoves them up
+X_train, X_test, y_train, y_test = cross_validation.train_test_split(X,y,test_size=0.2)
+#classifier
+clf = LinearRegression(n_jobs=-1)  #podemos usar adentro: n_jobs=1, que nos dice cuantos threads podemos usar
+clf.fit(X_train,y_train)
+accuracy = clf.score(X_test,y_test)
+
+#print("accuracy by LR:",accuracy)
+
+#Ahora si hacemos el pronostico del stock de 30 dias
+forecast_set = clf.predict(X_lately)
+#print("los precios predecidos del stock: ", forecast_set)
+#print("\nla exactitud y los dias son: ",accuracy,forecast_out)
+
+df['Forecast'] = np.nan
+  
+last_date = df.iloc[-1].name
+last_unix = last_date.timestamp()                   
+one_day = 86400
+next_unix = last_unix + one_day
+
+for i in forecast_set:
+    next_date = datetime.datetime.fromtimestamp(next_unix)
+    next_unix += one_day
+    df.loc[next_date] = [np.nan for _ in range(len(df.columns)-1)] + [i]
+
+df['Adj. Close'].plot()
+df['Forecast'].plot(c='k')
+plt.legend(loc=4)
+plt.xlabel('Date')
+plt.ylabel('Price')
+plt.show()                  
+                   
+                 
+    
